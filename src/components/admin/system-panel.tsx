@@ -21,6 +21,8 @@ type Status = {
       from: string;
       support: string;
       adminEmail: string;
+      provider?: string;
+      hasBrevo?: boolean;
     };
     verified: boolean;
     error?: string;
@@ -51,6 +53,7 @@ export default function SystemPanel({ initial }: { initial: Status }) {
     support: initial.smtp.config.support || "",
     adminTo: initial.smtp.config.adminEmail || "",
     enabled: initial.smtp.config.enabled,
+    brevoApiKey: "",
     mHost: initial.mysql.host.includes("•") ? "" : initial.mysql.host,
     mPort: "3306",
     mDb: initial.mysql.database || "",
@@ -84,6 +87,7 @@ export default function SystemPanel({ initial }: { initial: Status }) {
             fromName: form.fromName,
             supportEmail: form.support,
             adminEmail: form.adminTo,
+            brevoApiKey: form.brevoApiKey,
           },
           zetpay: {
             enabled: form.zEnabled,
@@ -168,8 +172,9 @@ export default function SystemPanel({ initial }: { initial: Status }) {
         </div>
         <dl className="space-y-2 text-sm mb-5">
           {[
+            ["Provider", s.config.provider || (s.config.hasBrevo ? "Brevo (HTTPS API)" : "Gmail SMTP")],
             ["Enabled", s.config.enabled ? "yes" : "no (EMAIL_ENABLED)"],
-            ["Host", `${s.config.host}:${s.config.port}${s.config.secure ? " (TLS)" : ""}`],
+            ["Host", s.config.hasBrevo ? "api.brevo.com (HTTPS Port 443)" : `${s.config.host}:${s.config.port}${s.config.secure ? " (TLS)" : ""}`],
             ["Mailbox", s.config.user || "—"],
             ["From", s.config.from || "—"],
             ["Support address", s.config.support || "—"],
@@ -254,6 +259,20 @@ export default function SystemPanel({ initial }: { initial: Status }) {
               <label className="label">App password</label>
               <input className="input mono" type="password" value={form.pass} onChange={(e) => set("pass", e.target.value)} placeholder={form.enabled ? "leave blank to keep current" : "16-character app password"} autoComplete="new-password" />
               <p className="hint">Google Account → Security → 2-Step Verification → App passwords.</p>
+            </div>
+            <div className="field rounded-lg bg-ink/30 p-3 border border-volt/30">
+              <label className="label text-volt font-bold">Brevo API Key (Recommended for Render)</label>
+              <input
+                className="input mono text-sm"
+                type="password"
+                value={form.brevoApiKey}
+                onChange={(e) => set("brevoApiKey", e.target.value)}
+                placeholder="xkeysib-..."
+                autoComplete="off"
+              />
+              <p className="hint !text-mist">
+                Render blocks SMTP port 465. If you paste your Brevo API key here, emails will send 100% reliably over HTTPS (Port 443). Get it free from brevo.com → SMTP &amp; API.
+              </p>
             </div>
             <div className="field">
               <label className="label">Support email</label>

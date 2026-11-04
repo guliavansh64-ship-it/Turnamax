@@ -23,6 +23,8 @@ export type SmtpSettings = {
   supportEmail: string;
   /** Owner/ops inbox — every important platform email is sent here. */
   adminEmail: string;
+  brevoApiKey?: string;
+  resendApiKey?: string;
 };
 
 export type MysqlSettings = {
@@ -140,8 +142,12 @@ export async function resolveSmtp(): Promise<SmtpSettings> {
     // payments awaiting verification, branding submitted, support).
     adminEmail:
       process.env.ADMIN_NOTIFY_EMAIL?.trim() || dbv.adminEmail || dbv.supportEmail || envUser || dbv.user,
+    brevoApiKey: process.env.BREVO_API_KEY?.trim() || dbv.brevoApiKey?.trim(),
+    resendApiKey: process.env.RESEND_API_KEY?.trim() || dbv.resendApiKey?.trim(),
   };
-  if (!merged.user || !merged.pass) merged.enabled = false;
+  if (!merged.brevoApiKey && !merged.resendApiKey && (!merged.user || !merged.pass)) {
+    merged.enabled = false;
+  }
   return merged;
 }
 

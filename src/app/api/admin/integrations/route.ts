@@ -22,6 +22,10 @@ export async function GET() {
       supportEmail: cfg.smtp.supportEmail,
       adminEmail: cfg.smtp.adminEmail,
       hasPassword: Boolean(cfg.smtp.pass),
+      hasBrevoKey: Boolean(cfg.smtp.brevoApiKey || process.env.BREVO_API_KEY),
+      brevoKeyPreview: (cfg.smtp.brevoApiKey || process.env.BREVO_API_KEY)
+        ? `${(cfg.smtp.brevoApiKey || process.env.BREVO_API_KEY || "").slice(0, 8)}••••••••`
+        : "",
     },
     zetpay: {
       enabled: cfg.zetpay.enabled,
@@ -72,6 +76,8 @@ export async function PUT(req: Request) {
     if (s.fromName !== undefined) next.smtp.fromName = String(s.fromName).trim();
     if (s.supportEmail !== undefined) next.smtp.supportEmail = String(s.supportEmail).trim();
     if (s.adminEmail !== undefined) next.smtp.adminEmail = String(s.adminEmail).trim();
+    if (s.brevoApiKey !== undefined && String(s.brevoApiKey).length > 0)
+      next.smtp.brevoApiKey = String(s.brevoApiKey).trim();
   }
 
   if (body.mysql && typeof body.mysql === "object") {

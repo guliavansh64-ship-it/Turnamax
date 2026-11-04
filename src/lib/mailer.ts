@@ -5,8 +5,9 @@ import { resolveSmtp } from "./integrations";
 /* ---------------- config ---------------- */
 
 export async function emailEnabled(): Promise<boolean> {
-  if (process.env.RESEND_API_KEY?.trim() || process.env.BREVO_API_KEY?.trim()) return true;
-  return (await resolveSmtp()).enabled;
+  const cfg = await resolveSmtp();
+  if (cfg.brevoApiKey || cfg.resendApiKey || process.env.RESEND_API_KEY?.trim() || process.env.BREVO_API_KEY?.trim()) return true;
+  return cfg.enabled;
 }
 
 export async function supportEmail(): Promise<string> {
@@ -130,7 +131,7 @@ export async function sendMail(opts: {
   const fromName = cfg.fromName || "Tournamax";
 
   // 1. Resend HTTP API (Port 443 - never blocked by cloud hosts like Render)
-  const resendKey = process.env.RESEND_API_KEY?.trim();
+  const resendKey = (process.env.RESEND_API_KEY || cfg.resendApiKey)?.trim();
   if (resendKey) {
     try {
       const res = await fetch("https://api.resend.com/emails", {
@@ -158,7 +159,7 @@ export async function sendMail(opts: {
   }
 
   // 2. Brevo HTTP API (Port 443 - 300 free emails/day, never blocked by cloud hosts)
-  const brevoKey = process.env.BREVO_API_KEY?.trim();
+  const brevoKey = (process.env.BREVO_API_KEY || cfg.brevoApiKey)?.trim();
   if (brevoKey) {
     try {
       const res = await fetch("https://api.brevo.com/v3/smtp/email", {
@@ -217,8 +218,9 @@ export async function sendMail(opts: {
 
 /** Verify SMTP / HTTP email credentials without sending a message. */
 export async function verifySmtp(): Promise<MailResult> {
-  const resendKey = process.env.RESEND_API_KEY?.trim();
-  const brevoKey = process.env.BREVO_API_KEY?.trim();
+  const cfg = await resolveSmtp();
+  const resendKey = (process.env.RESEND_API_KEY || cfg.resendApiKey)?.trim();
+  const brevoKey = (process.env.BREVO_API_KEY || cfg.brevoApiKey)?.trim();
 
   if (resendKey) {
     try {

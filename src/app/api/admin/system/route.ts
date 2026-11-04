@@ -30,6 +30,10 @@ async function smtpConfig() {
     from: cfg.fromAddress,
     support: cfg.supportEmail,
     adminEmail: cfg.adminEmail,
+    hasBrevo: Boolean(cfg.brevoApiKey || process.env.BREVO_API_KEY),
+    provider: (cfg.brevoApiKey || process.env.BREVO_API_KEY)
+      ? "Brevo (HTTPS Port 443 - Recommended for Render)"
+      : "Gmail SMTP",
   };
 }
 
