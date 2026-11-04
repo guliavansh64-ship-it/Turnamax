@@ -32,11 +32,30 @@ async function main() {
         : { rejectUnauthorized: false },
     });
 
-    console.log(`Executing ${statements.length} migration statements on remote database...`);
     const client = await pool.connect();
     try {
+      // Check if the schema is already initialized
+      const check = await client.query(`SELECT to_regclass('public.admins') AS tbl_exists;`);
+      if (check.rows[0]?.tbl_exists) {
+        console.log("Database tables already initialized in Neon. Skipping migration.");
+        return;
+      }
+
+      console.log(`Executing ${statements.length} migration statements on remote database...`);
       for (const stmt of statements) {
-        await client.query(stmt);
+        try {
+          await client.query(stmt);
+        } catch (err) {
+          // Ignore if table or object already exists (codes 42P07, 42710)
+          if (
+            err.code === "42P07" ||
+            err.code === "42710" ||
+            err.message?.includes("already exists")
+          ) {
+            continue;
+          }
+          throw err;
+        }
       }
       console.log("Remote database initialized successfully!");
     } finally {
