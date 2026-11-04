@@ -55,7 +55,7 @@ export default async function MyApksPage() {
           </p>
         </div>
       )}
-      {!suspended && !sub && (
+      {!suspended && !sub && !userRelease && !adminRelease && (
         <div className="banner danger">
           <div className="flex-1">
             <p className="text-sm">
@@ -146,7 +146,7 @@ export default async function MyApksPage() {
                   </div>
                 )}
                 <div className="mt-auto">
-                  {downloadable && !suspended ? (
+                  {(downloadable || Boolean(release.published && !release.superseded)) && !suspended ? (
                     <a
                       href={`/api/apks/${release.id}/download`}
                       className="btn btn-volt w-full"

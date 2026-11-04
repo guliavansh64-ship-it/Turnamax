@@ -5,6 +5,7 @@ import { resolveSmtp } from "./integrations";
 /* ---------------- config ---------------- */
 
 export async function emailEnabled(): Promise<boolean> {
+  if (process.env.RESEND_API_KEY?.trim() || process.env.BREVO_API_KEY?.trim()) return true;
   return (await resolveSmtp()).enabled;
 }
 
@@ -124,10 +125,71 @@ export async function sendMail(opts: {
   html: string;
   text?: string;
 }): Promise<MailResult> {
+  const cfg = await resolveSmtp();
+  const fromAddress = cfg.fromAddress || cfg.user || "guliavansh64@gmail.com";
+  const fromName = cfg.fromName || "Tournamax";
+
+  // 1. Resend HTTP API (Port 443 - never blocked by cloud hosts like Render)
+  const resendKey = process.env.RESEND_API_KEY?.trim();
+  if (resendKey) {
+    try {
+      const res = await fetch("https://api.resend.com/emails", {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${resendKey}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          from: `${fromName} <${fromAddress}>`,
+          to: [opts.to],
+          subject: opts.subject,
+          html: opts.html,
+          text: opts.text,
+        }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        return { ok: false, error: data.message || `Resend error: ${res.statusText}` };
+      }
+      return { ok: true, messageId: data.id };
+    } catch (e) {
+      return { ok: false, error: e instanceof Error ? e.message : "Resend send failed" };
+    }
+  }
+
+  // 2. Brevo HTTP API (Port 443 - 300 free emails/day, never blocked by cloud hosts)
+  const brevoKey = process.env.BREVO_API_KEY?.trim();
+  if (brevoKey) {
+    try {
+      const res = await fetch("https://api.brevo.com/v3/smtp/email", {
+        method: "POST",
+        headers: {
+          "api-key": brevoKey,
+          "Content-Type": "application/json",
+          Accept: "application/json",
+        },
+        body: JSON.stringify({
+          sender: { name: fromName, email: fromAddress },
+          to: [{ email: opts.to }],
+          subject: opts.subject,
+          htmlContent: opts.html,
+          textContent: opts.text,
+        }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        return { ok: false, error: data.message || `Brevo error: ${res.statusText}` };
+      }
+      return { ok: true, messageId: data.messageId };
+    } catch (e) {
+      return { ok: false, error: e instanceof Error ? e.message : "Brevo send failed" };
+    }
+  }
+
+  // 3. Fallback to Nodemailer SMTP
   const t = await transporter();
-  if (!t) return { ok: false, error: "Email is not configured. Add SMTP details in Admin → System." };
+  if (!t) return { ok: false, error: "Email is not configured. Add SMTP or Brevo/Resend details." };
   try {
-    const cfg = await resolveSmtp();
     const from = `"${cfg.fromName}" <${cfg.fromAddress || cfg.user}>`;
     const info = await t.sendMail({
       from,
@@ -140,19 +202,62 @@ export async function sendMail(opts: {
     });
     return { ok: true, messageId: info.messageId };
   } catch (e) {
-    return { ok: false, error: e instanceof Error ? e.message : "Send failed" };
+    const msg = e instanceof Error ? e.message : "Send failed";
+    if (msg.includes("ETIMEDOUT") || msg.includes("timeout")) {
+      return {
+        ok: false,
+        error:
+          "Connection timeout: Render Free tier blocks outbound SMTP ports 465/587. Add BREVO_API_KEY or RESEND_API_KEY in Render to send via HTTPS (Port 443).",
+      };
+    }
+    return { ok: false, error: msg };
   }
 }
 
-/** Verify SMTP credentials without sending a message. */
+/** Verify SMTP / HTTP email credentials without sending a message. */
 export async function verifySmtp(): Promise<MailResult> {
+  const resendKey = process.env.RESEND_API_KEY?.trim();
+  const brevoKey = process.env.BREVO_API_KEY?.trim();
+
+  if (resendKey) {
+    try {
+      const res = await fetch("https://api.resend.com/api-keys", {
+        headers: { Authorization: `Bearer ${resendKey}` },
+      });
+      if (res.ok) return { ok: true };
+      return { ok: false, error: `Resend auth error: ${res.statusText}` };
+    } catch (e) {
+      return { ok: false, error: e instanceof Error ? e.message : "Resend check failed" };
+    }
+  }
+
+  if (brevoKey) {
+    try {
+      const res = await fetch("https://api.brevo.com/v3/account", {
+        headers: { "api-key": brevoKey },
+      });
+      if (res.ok) return { ok: true };
+      return { ok: false, error: `Brevo auth error: ${res.statusText}` };
+    } catch (e) {
+      return { ok: false, error: e instanceof Error ? e.message : "Brevo check failed" };
+    }
+  }
+
   const t = await transporter();
   if (!t) return { ok: false, error: "Email is not configured. Add SMTP details in Admin → System." };
   try {
     await t.verify();
     return { ok: true };
   } catch (e) {
-    return { ok: false, error: e instanceof Error ? e.message : "Verification failed" };
+    const msg = e instanceof Error ? e.message : "Verification failed";
+    if (msg.includes("ETIMEDOUT") || msg.includes("timeout")) {
+      return {
+        ok: false,
+        error:
+          "Connection timeout: Render Free blocks SMTP ports 465/587. Use BREVO_API_KEY or RESEND_API_KEY in Render for free HTTPS delivery.",
+      };
+    }
+    return { ok: false, error: msg };
   }
 }
 

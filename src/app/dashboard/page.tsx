@@ -290,7 +290,15 @@ export default async function DashboardOverview() {
             <div className="flex items-center justify-between">
               <span className="text-sm font-semibold">User Panel</span>
               {userApk ? (
-                <span className="tag tag-green">ready v{userApk.versionName}</span>
+                <div className="flex items-center gap-2">
+                  <span className="tag tag-green">ready v{userApk.versionName}</span>
+                  <a
+                    href={`/api/apks/${userApk.id}/download`}
+                    className="btn btn-volt btn-xs !py-0.5 !px-2 text-[11px]"
+                  >
+                    Download
+                  </a>
+                </div>
               ) : (
                 <span className="tag tag-gray">preparing</span>
               )}
@@ -298,7 +306,15 @@ export default async function DashboardOverview() {
             <div className="flex items-center justify-between">
               <span className="text-sm font-semibold">Admin Panel</span>
               {adminApk ? (
-                <span className="tag tag-green">ready v{adminApk.versionName}</span>
+                <div className="flex items-center gap-2">
+                  <span className="tag tag-green">ready v{adminApk.versionName}</span>
+                  <a
+                    href={`/api/apks/${adminApk.id}/download`}
+                    className="btn btn-volt btn-xs !py-0.5 !px-2 text-[11px]"
+                  >
+                    Download
+                  </a>
+                </div>
               ) : (
                 <span className="tag tag-gray">preparing</span>
               )}

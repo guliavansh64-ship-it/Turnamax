@@ -41,9 +41,10 @@ export async function GET(
   if (!release.published || release.superseded)
     return jsonError("This APK release is not available.", 410);
 
-  // Plan gate: active subscription, or inside the post-expiry grace window.
+  // Plan gate: active subscription, inside grace window, or explicitly published for this customer.
   const access = await getPlanAccess(cur.customer.id);
-  if (!(access.active || access.grace))
+  const isPublishedForCustomer = release.published && !release.superseded;
+  if (!(access.active || access.grace || isPublishedForCustomer))
     return jsonError(DOWNLOAD_LOCK_MESSAGE, 402);
 
   const filePath = storagePath("apks", release.fileName);
