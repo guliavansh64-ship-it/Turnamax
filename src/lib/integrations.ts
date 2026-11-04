@@ -130,7 +130,9 @@ export async function resolveSmtp(): Promise<SmtpSettings> {
     user: envUser || dbv.user,
     pass: envPass || dbv.pass,
     fromAddress:
-      process.env.MAIL_FROM_ADDRESS?.trim() || dbv.fromAddress || envUser || dbv.user,
+      (process.env.SMTP_HOST?.includes("gmail") || dbv.host?.includes("gmail")) && (envUser || dbv.user)
+        ? (envUser || dbv.user)
+        : (process.env.MAIL_FROM_ADDRESS?.trim() || dbv.fromAddress || envUser || dbv.user),
     fromName: process.env.APP_NAME?.trim() || dbv.fromName || "Tournamax",
     supportEmail:
       process.env.SUPPORT_EMAIL?.trim() || dbv.supportEmail || envUser || dbv.user,

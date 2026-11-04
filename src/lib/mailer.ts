@@ -190,7 +190,8 @@ export async function sendMail(opts: {
   const t = await transporter();
   if (!t) return { ok: false, error: "Email is not configured. Add SMTP or Brevo/Resend details." };
   try {
-    const from = `"${cfg.fromName}" <${cfg.fromAddress || cfg.user}>`;
+    const senderEmail = (cfg.host.includes("gmail") && cfg.user) ? cfg.user : (cfg.fromAddress || cfg.user);
+    const from = `"${cfg.fromName}" <${senderEmail}>`;
     const info = await t.sendMail({
       from,
       to: opts.to,
@@ -374,8 +375,9 @@ export async function sendAdminAlert(
 
     const t = await transporter();
     if (!t) return { ok: false, error: "SMTP is not configured." };
+    const senderEmail = (cfg.host.includes("gmail") && cfg.user) ? cfg.user : (cfg.fromAddress || cfg.user);
     const info = await t.sendMail({
-      from: `"${cfg.fromName}" <${cfg.fromAddress || cfg.user}>`,
+      from: `"${cfg.fromName}" <${senderEmail}>`,
       to: cfg.adminEmail,
       subject: `[Tournamax] ${subject}`.slice(0, 200),
       html,
