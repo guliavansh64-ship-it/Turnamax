@@ -73,6 +73,7 @@ export const metadata: Metadata = {
     icon: "/icon.png",
     apple: "/apple-icon.png",
   },
+  manifest: "/manifest.webmanifest",
 };
 
 const jsonLd = {

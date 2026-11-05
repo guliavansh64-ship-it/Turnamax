@@ -1,0 +1,25 @@
+{
+  "name": "Tournamax — #1 Free Tournament App & White-Label Esports Platform",
+  "short_name": "Tournamax",
+  "description": "Create, host and manage esports tournaments for Free Fire, BGMI, PUBG Mobile & more. Branded tournament app with custom user and admin APKs.",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#070a11",
+  "theme_color": "#c8f32e",
+  "categories": ["games", "entertainment", "sports"],
+  "lang": "en",
+  "icons": [
+    {
+      "src": "/icon.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/logo.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "maskable"
+    }
+  ]
+}
