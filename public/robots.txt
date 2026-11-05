@@ -12,4 +12,4 @@ Disallow: /pay/
 Disallow: /reset-password/
 Disallow: /verify-email/
 
-Sitemap: https://turnamax.onrender.com/sitemap.xml
+Sitemap: https://tournamax.toolsnetwork.online/sitemap.xml

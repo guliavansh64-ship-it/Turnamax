@@ -12,7 +12,7 @@ export function requestOrigin(req: Request): string {
   const proto = req.headers.get("x-forwarded-proto") ?? (req.headers.get("host")?.includes(":") ? "http" : "https");
   const host = req.headers.get("host");
   if (host) return `${proto}://${host}`.replace(/\/+$/, "");
-  return (process.env.APP_BASE_URL ?? "http://localhost:3000").replace(/\/+$/, "");
+  return (process.env.APP_BASE_URL ?? "https://tournamax.toolsnetwork.online").replace(/\/+$/, "");
 }
 
 /**

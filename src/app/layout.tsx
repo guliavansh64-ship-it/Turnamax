@@ -13,7 +13,7 @@ export const viewport: Viewport = {
   colorScheme: "dark",
 };
 
-const baseUrl = (process.env.APP_BASE_URL ?? "https://turnamax.onrender.com").replace(/\/+$/, "");
+const baseUrl = (process.env.APP_BASE_URL ?? "https://tournamax.toolsnetwork.online").replace(/\/+$/, "");
 
 export const metadata: Metadata = {
   metadataBase: new URL(baseUrl),

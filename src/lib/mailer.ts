@@ -52,7 +52,7 @@ export function absoluteUrl(req: Request | null, path: string): string {
       return `${proto}://${host}${path}`;
     }
   }
-  const base = (process.env.APP_BASE_URL ?? "http://localhost:3000").replace(/\/+$/, "");
+  const base = (process.env.APP_BASE_URL ?? "https://tournamax.toolsnetwork.online").replace(/\/+$/, "");
   return `${base}${path}`;
 }
 

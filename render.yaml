@@ -12,5 +12,7 @@ services:
         value: "1"
       - key: APP_NAME
         value: Tournamax
+      - key: APP_BASE_URL
+        value: https://tournamax.toolsnetwork.online
       - key: ADMIN_NOTIFY_EMAIL
         value: guliavansh64@gmail.com

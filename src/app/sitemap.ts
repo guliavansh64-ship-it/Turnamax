@@ -1,7 +1,7 @@
 import type { MetadataRoute } from "next";
 
 export default function sitemap(): MetadataRoute.Sitemap {
-  const baseUrl = (process.env.APP_BASE_URL ?? "https://turnamax.onrender.com").replace(/\/+$/, "");
+  const baseUrl = (process.env.APP_BASE_URL ?? "https://tournamax.toolsnetwork.online").replace(/\/+$/, "");
   const now = new Date();
 
   return [
