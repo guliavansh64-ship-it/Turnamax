@@ -10,6 +10,10 @@ export default function sitemap(): MetadataRoute.Sitemap {
       lastModified: now,
       changeFrequency: "daily",
       priority: 1.0,
+      images: [
+        `${baseUrl}/logo.png`,
+        `${baseUrl}/icon.png`,
+      ],
     },
     {
       url: `${baseUrl}/register`,
