@@ -103,5 +103,8 @@ export async function POST(req: Request) {
   });
 
   if (!res.ok) return jsonError(res.error ?? "Send failed.", 502);
-  return jsonOk({ messageId: res.messageId });
+  return jsonOk({
+    messageId: res.messageId,
+    details: `Message accepted by mail server (ID: ${res.messageId || "ok"}). Check Spam/Junk folder for ${to}.`,
+  });
 }

@@ -146,7 +146,7 @@ export default function SystemPanel({ initial }: { initial: Status }) {
       });
       const data = await res.json().catch(() => ({}));
       if (data.ok) {
-        toast("Test email sent — check the inbox (and spam folder).", "success");
+        toast(data.details ?? "Test email sent — check the inbox (and spam folder).", "success");
       } else toast(data.error ?? "Send failed.", "error");
     } catch {
       toast("Network error.", "error");
