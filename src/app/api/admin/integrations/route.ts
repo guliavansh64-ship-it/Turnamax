@@ -10,6 +10,7 @@ export async function GET() {
   const cur = await getCurrentAdmin();
   if (!cur) return jsonError("Not authenticated.", 401);
   const cfg = await getIntegrations(true);
+  const activeBrevo = cfg.smtp.brevoApiKey || process.env.BREVO_API_KEY;
   return jsonOk({
     smtp: {
       enabled: cfg.smtp.enabled,
@@ -22,9 +23,9 @@ export async function GET() {
       supportEmail: cfg.smtp.supportEmail,
       adminEmail: cfg.smtp.adminEmail,
       hasPassword: Boolean(cfg.smtp.pass),
-      hasBrevoKey: Boolean(cfg.smtp.brevoApiKey || process.env.BREVO_API_KEY),
-      brevoKeyPreview: (cfg.smtp.brevoApiKey || process.env.BREVO_API_KEY)
-        ? `${(cfg.smtp.brevoApiKey || process.env.BREVO_API_KEY || "").slice(0, 8)}••••••••`
+      hasBrevoKey: Boolean(activeBrevo),
+      brevoKeyPreview: activeBrevo
+        ? `${activeBrevo.slice(0, 8)}••••••••`
         : "",
     },
     zetpay: {
@@ -93,11 +94,19 @@ export async function PUT(req: Request) {
   }
 
   if (next.smtp.enabled) {
-    if (!/^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(next.smtp.user))
-      return jsonError("SMTP username must be a valid email address.");
-    if (!next.smtp.pass) return jsonError("SMTP app password is required.");
-    if (![465, 587, 25].includes(next.smtp.port))
-      return jsonError("SMTP port should be 465 (TLS), 587 or 25.");
+    const hasHttpApi = Boolean(
+      next.smtp.brevoApiKey ||
+        process.env.BREVO_API_KEY ||
+        next.smtp.resendApiKey ||
+        process.env.RESEND_API_KEY
+    );
+    if (!hasHttpApi) {
+      if (!/^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(next.smtp.user))
+        return jsonError("SMTP username must be a valid email address.");
+      if (!next.smtp.pass) return jsonError("SMTP app password is required.");
+      if (![465, 587, 25].includes(next.smtp.port))
+        return jsonError("SMTP port should be 465 (TLS), 587 or 25.");
+    }
   }
   if (body.zetpay && typeof body.zetpay === "object") {
     const z = body.zetpay as Record<string, unknown>;

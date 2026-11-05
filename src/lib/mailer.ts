@@ -162,6 +162,13 @@ export async function sendMail(opts: {
   const brevoKey = (process.env.BREVO_API_KEY || cfg.brevoApiKey)?.trim();
   if (brevoKey) {
     try {
+      const senderEmail =
+        process.env.BREVO_SENDER_EMAIL?.trim() ||
+        (cfg.fromAddress && !cfg.fromAddress.includes("example.com")
+          ? cfg.fromAddress
+          : "rahuldeveloper011@gmail.com");
+      const replyToEmail = cfg.supportEmail || cfg.adminEmail || "guliavansh64@gmail.com";
+
       const res = await fetch("https://api.brevo.com/v3/smtp/email", {
         method: "POST",
         headers: {
@@ -170,7 +177,8 @@ export async function sendMail(opts: {
           Accept: "application/json",
         },
         body: JSON.stringify({
-          sender: { name: fromName, email: fromAddress },
+          sender: { name: fromName, email: senderEmail },
+          replyTo: { email: replyToEmail, name: fromName },
           to: [{ email: opts.to }],
           subject: opts.subject,
           htmlContent: opts.html,
@@ -340,10 +348,7 @@ export async function sendAdminAlert(
 ): Promise<MailResult> {
   try {
     const cfg = await resolveSmtp();
-    if (!cfg.enabled || !cfg.adminEmail) {
-      return { ok: false, error: "Admin notifications are not configured." };
-    }
-    const support = cfg.supportEmail || cfg.adminEmail;
+    const adminEmail = cfg.adminEmail || "guliavansh64@gmail.com";
     const rows = Object.entries(meta ?? {})
       .filter(([, v]) => v !== undefined && v !== null && v !== "")
       .map(
@@ -375,17 +380,12 @@ export async function sendAdminAlert(
       "</table></td></tr></table></body></html>",
     ].join("");
 
-    const t = await transporter();
-    if (!t) return { ok: false, error: "SMTP is not configured." };
-    const senderEmail = (cfg.host.includes("gmail") && cfg.user) ? cfg.user : (cfg.fromAddress || cfg.user);
-    const info = await t.sendMail({
-      from: `"${cfg.fromName}" <${senderEmail}>`,
-      to: cfg.adminEmail,
+    return await sendMail({
+      to: adminEmail,
       subject: `[Tournamax] ${subject}`.slice(0, 200),
       html,
       text: `${subject}\n\n${body}`,
     });
-    return { ok: true, messageId: info.messageId };
   } catch (error) {
     return { ok: false, error: error instanceof Error ? error.message : "Send failed" };
   }

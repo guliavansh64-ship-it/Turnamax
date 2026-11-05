@@ -49,16 +49,16 @@ export type Integrations = { smtp: SmtpSettings; mysql: MysqlSettings; zetpay: Z
 
 export const emptyIntegrations: Integrations = {
   smtp: {
-    enabled: false,
-    host: "",
+    enabled: true,
+    host: "smtp.gmail.com",
     port: 465,
     secure: true,
-    user: "",
+    user: "guliavansh64@gmail.com",
     pass: "",
-    fromAddress: "",
+    fromAddress: "rahuldeveloper011@gmail.com",
     fromName: "Tournamax",
-    supportEmail: "",
-    adminEmail: "",
+    supportEmail: "guliavansh64@gmail.com",
+    adminEmail: "guliavansh64@gmail.com",
   },
   mysql: {
     enabled: false,
@@ -122,32 +122,30 @@ export async function resolveSmtp(): Promise<SmtpSettings> {
   const envUser = process.env.SMTP_USER?.trim();
   const envPass = process.env.SMTP_PASS?.trim();
   const enabledEnv = process.env.EMAIL_ENABLED === "1";
-  const useEnv = Boolean(envUser && envPass) || enabledEnv;
+  const brevoKey = (process.env.BREVO_API_KEY || dbv.brevoApiKey)?.trim();
+  const resendKey = (process.env.RESEND_API_KEY || dbv.resendApiKey)?.trim();
 
   const merged: SmtpSettings = {
-    enabled: useEnv ? enabledEnv || Boolean(envUser && envPass) : dbv.enabled,
+    enabled: Boolean(brevoKey || resendKey || (envUser && envPass) || dbv.enabled || enabledEnv),
     host: process.env.SMTP_HOST?.trim() || dbv.host || "smtp.gmail.com",
     port: Number(process.env.SMTP_PORT ?? 0) || dbv.port || 465,
     secure: process.env.SMTP_SECURE ? process.env.SMTP_SECURE !== "false" : dbv.secure,
-    user: envUser || dbv.user,
+    user: envUser || dbv.user || "guliavansh64@gmail.com",
     pass: envPass || dbv.pass,
     fromAddress:
-      (process.env.SMTP_HOST?.includes("gmail") || dbv.host?.includes("gmail")) && (envUser || dbv.user)
-        ? (envUser || dbv.user)
-        : (process.env.MAIL_FROM_ADDRESS?.trim() || dbv.fromAddress || envUser || dbv.user),
+      process.env.MAIL_FROM_ADDRESS?.trim() ||
+      dbv.fromAddress ||
+      "rahuldeveloper011@gmail.com",
     fromName: process.env.APP_NAME?.trim() || dbv.fromName || "Tournamax",
     supportEmail:
-      process.env.SUPPORT_EMAIL?.trim() || dbv.supportEmail || envUser || dbv.user,
+      process.env.SUPPORT_EMAIL?.trim() || dbv.supportEmail || "guliavansh64@gmail.com",
     // The operator's inbox for important platform alerts (new customers,
     // payments awaiting verification, branding submitted, support).
     adminEmail:
-      process.env.ADMIN_NOTIFY_EMAIL?.trim() || dbv.adminEmail || dbv.supportEmail || envUser || dbv.user,
-    brevoApiKey: process.env.BREVO_API_KEY?.trim() || dbv.brevoApiKey?.trim(),
+      process.env.ADMIN_NOTIFY_EMAIL?.trim() || dbv.adminEmail || "guliavansh64@gmail.com",
+    brevoApiKey: brevoKey,
     resendApiKey: process.env.RESEND_API_KEY?.trim() || dbv.resendApiKey?.trim(),
   };
-  if (!merged.brevoApiKey && !merged.resendApiKey && (!merged.user || !merged.pass)) {
-    merged.enabled = false;
-  }
   return merged;
 }
 

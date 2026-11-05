@@ -70,7 +70,8 @@ export async function POST(req: Request) {
   if (String(body.action ?? "") !== "send_test")
     return jsonError("Unknown action.");
 
-  const to = String(body.to ?? "").trim() || (process.env.SMTP_USER ?? "");
+  const cfg = await resolveSmtp();
+  const to = String(body.to ?? "").trim() || cfg.adminEmail || "guliavansh64@gmail.com";
   if (!/^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(to))
     return jsonError("Enter a valid recipient email.");
 

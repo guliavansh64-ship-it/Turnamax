@@ -80,7 +80,7 @@ export function newOrderCode(): string {
 /* ---------- storage ---------- */
 
 export function storageRoot(): string {
-  return path.join(process.cwd(), "storage");
+  return process.env.STORAGE_DIR || path.join(process.cwd(), "storage");
 }
 
 export async function ensureDir(sub: string) {
