@@ -10,6 +10,7 @@ import {
 import { clientIp, jsonError, jsonOk, readJsonBody } from "@/lib/utils";
 import { rateLimit } from "@/lib/rate-limit";
 import { logAudit } from "@/lib/audit";
+import { emailEnabled, sendLoginNotificationEmail } from "@/lib/mailer";
 
 export const dynamic = "force-dynamic";
 
@@ -35,7 +36,8 @@ export async function POST(req: Request) {
   if (customer.status === "deactivated")
     return jsonError("This account has been deactivated. Contact support.", 403);
 
-  const token = await createCustomerSession(customer.id, ip, req.headers.get("user-agent") ?? "");
+  const userAgent = req.headers.get("user-agent") ?? "";
+  const token = await createCustomerSession(customer.id, ip, userAgent);
   await setCustomerSessionCookie(token);
   await logAudit({
     actorType: "customer",
@@ -45,5 +47,15 @@ export async function POST(req: Request) {
     entityId: String(customer.id),
     ip,
   });
+
+  // Send security login notification to the customer's Gmail
+  if (await emailEnabled()) {
+    void sendLoginNotificationEmail(customer.email, customer.name, {
+      ip,
+      userAgent,
+      time: new Date().toLocaleString("en-US", { timeZone: "Asia/Kolkata" }) + " IST",
+    });
+  }
+
   return jsonOk({ id: customer.id });
 }

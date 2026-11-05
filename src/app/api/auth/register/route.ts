@@ -50,7 +50,7 @@ export async function POST(req: Request) {
 
   const [customer] = await db
     .insert(customers)
-    .values({ name, email, passwordHash: hashPassword(password), emailVerified: true })
+    .values({ name, email, passwordHash: hashPassword(password), emailVerified: false })
     .returning();
 
   const token = await createCustomerSession(customer.id, ip, req.headers.get("user-agent") ?? "");

@@ -314,6 +314,32 @@ export async function sendPasswordResetEmail(
   });
 }
 
+export async function sendLoginNotificationEmail(
+  to: string,
+  name: string,
+  meta?: { ip?: string; userAgent?: string; time?: string }
+): Promise<MailResult> {
+  const support = await supportEmail();
+  const timeStr = meta?.time || new Date().toUTCString();
+  const ipStr = meta?.ip || "Unknown IP";
+  return sendMail({
+    to,
+    subject: "Security notification: New login to Tournamax",
+    html: shell(
+      "New Login Detected",
+      `<p>Hi ${escapeHtml(name)},</p>
+       <p>We detected a new login to your Tournamax account on <b>${escapeHtml(timeStr)}</b>.</p>
+       <table role="presentation" cellpadding="0" cellspacing="0" style="margin:16px 0;width:100%;border:1px solid #eef1f5;border-radius:8px;font-size:13px;">
+         <tr><td style="padding:8px 12px;color:#7b8594;border-bottom:1px solid #eef1f5;">IP Address</td><td style="padding:8px 12px;font-weight:600;border-bottom:1px solid #eef1f5;">${escapeHtml(ipStr)}</td></tr>
+         ${meta?.userAgent ? `<tr><td style="padding:8px 12px;color:#7b8594;">Device / Browser</td><td style="padding:8px 12px;font-weight:600;">${escapeHtml(meta.userAgent.slice(0, 80))}</td></tr>` : ""}
+       </table>
+       <p style="margin-top:14px;">If this was you, you can safely ignore this message. If you did not log in, please reset your password immediately.</p>`,
+      support,
+      "New login detected on your Tournamax account."
+    ),
+  });
+}
+
 /** Generic transactional notice for account events (payments, APKs, subscriptions). */
 export async function sendNoticeEmail(
   to: string,
