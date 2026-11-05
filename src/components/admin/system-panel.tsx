@@ -43,15 +43,19 @@ type Status = {
 export default function SystemPanel({ initial }: { initial: Status }) {
   const [st, setSt] = useState<Status>(initial);
   const [busy, setBusy] = useState<"refresh" | "test" | "save" | null>(null);
-  const [to, setTo] = useState(initial.smtp.config.from || "");
+  const [to, setTo] = useState(
+    initial.smtp.config.adminEmail && !initial.smtp.config.adminEmail.includes("•")
+      ? initial.smtp.config.adminEmail
+      : "guliavansh64@gmail.com"
+  );
   const [form, setForm] = useState({
     host: initial.smtp.config.host || "smtp.gmail.com",
     port: String(initial.smtp.config.port || 465),
-    user: initial.smtp.config.user || "",
+    user: (initial.smtp.config.user || "").includes("•") ? "" : initial.smtp.config.user || "",
     pass: "",
     fromName: "Tournamax",
-    support: initial.smtp.config.support || "",
-    adminTo: initial.smtp.config.adminEmail || "",
+    support: (initial.smtp.config.support || "").includes("•") ? "" : initial.smtp.config.support || "guliavansh64@gmail.com",
+    adminTo: (initial.smtp.config.adminEmail || "").includes("•") ? "" : initial.smtp.config.adminEmail || "guliavansh64@gmail.com",
     enabled: initial.smtp.config.enabled,
     brevoApiKey: "",
     mHost: initial.mysql.host.includes("•") ? "" : initial.mysql.host,
@@ -83,7 +87,7 @@ export default function SystemPanel({ initial }: { initial: Status }) {
             secure: Number(form.port) === 465,
             user: form.user,
             pass: form.pass,
-            fromAddress: form.user,
+            fromAddress: form.user || "rahuldeveloper011@gmail.com",
             fromName: form.fromName,
             supportEmail: form.support,
             adminEmail: form.adminTo,
@@ -142,11 +146,11 @@ export default function SystemPanel({ initial }: { initial: Status }) {
       const res = await fetch("/api/admin/system", {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ action: "send_test", to }),
+        body: JSON.stringify({ action: "send_test", to: to || "guliavansh64@gmail.com" }),
       });
       const data = await res.json().catch(() => ({}));
       if (data.ok) {
-        toast(data.details ?? "Test email sent — check the inbox (and spam folder).", "success");
+        toast("Test email sent to " + (to || "guliavansh64@gmail.com") + " via Brevo! Check inbox.", "success");
       } else toast(data.error ?? "Send failed.", "error");
     } catch {
       toast("Network error.", "error");

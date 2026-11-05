@@ -1,5 +1,5 @@
 import { getCurrentAdmin, originOk } from "@/lib/auth";
-import { getIntegrations, saveIntegrations, type Integrations } from "@/lib/integrations";
+import { getIntegrations, resolveSmtp, saveIntegrations, type Integrations } from "@/lib/integrations";
 import { clientIp, jsonError, jsonOk, readJsonBody } from "@/lib/utils";
 import { logAudit } from "@/lib/audit";
 
@@ -10,18 +10,19 @@ export async function GET() {
   const cur = await getCurrentAdmin();
   if (!cur) return jsonError("Not authenticated.", 401);
   const cfg = await getIntegrations(true);
-  const activeBrevo = cfg.smtp.brevoApiKey || process.env.BREVO_API_KEY;
+  const resolved = await resolveSmtp();
+  const activeBrevo = resolved.brevoApiKey;
   return jsonOk({
     smtp: {
-      enabled: cfg.smtp.enabled,
-      host: cfg.smtp.host,
-      port: cfg.smtp.port,
-      secure: cfg.smtp.secure,
-      user: cfg.smtp.user,
-      fromAddress: cfg.smtp.fromAddress,
-      fromName: cfg.smtp.fromName,
-      supportEmail: cfg.smtp.supportEmail,
-      adminEmail: cfg.smtp.adminEmail,
+      enabled: resolved.enabled,
+      host: resolved.host,
+      port: resolved.port,
+      secure: resolved.secure,
+      user: resolved.user,
+      fromAddress: resolved.fromAddress,
+      fromName: resolved.fromName,
+      supportEmail: resolved.supportEmail,
+      adminEmail: resolved.adminEmail,
       hasPassword: Boolean(cfg.smtp.pass),
       hasBrevoKey: Boolean(activeBrevo),
       brevoKeyPreview: activeBrevo
@@ -70,14 +71,18 @@ export async function PUT(req: Request) {
     if (s.host !== undefined) next.smtp.host = String(s.host).trim();
     if (s.port !== undefined) next.smtp.port = Number(s.port) || 465;
     if (s.secure !== undefined) next.smtp.secure = Boolean(s.secure);
-    if (s.user !== undefined) next.smtp.user = String(s.user).trim();
+    if (s.user !== undefined && String(s.user).trim().length > 0 && !String(s.user).includes("•"))
+      next.smtp.user = String(s.user).trim();
     if (s.pass !== undefined && String(s.pass).length > 0)
       next.smtp.pass = String(s.pass).trim();
-    if (s.fromAddress !== undefined) next.smtp.fromAddress = String(s.fromAddress).trim();
+    if (s.fromAddress !== undefined && String(s.fromAddress).trim().length > 0 && !String(s.fromAddress).includes("•"))
+      next.smtp.fromAddress = String(s.fromAddress).trim();
     if (s.fromName !== undefined) next.smtp.fromName = String(s.fromName).trim();
-    if (s.supportEmail !== undefined) next.smtp.supportEmail = String(s.supportEmail).trim();
-    if (s.adminEmail !== undefined) next.smtp.adminEmail = String(s.adminEmail).trim();
-    if (s.brevoApiKey !== undefined && String(s.brevoApiKey).length > 0)
+    if (s.supportEmail !== undefined && !String(s.supportEmail).includes("•"))
+      next.smtp.supportEmail = String(s.supportEmail).trim();
+    if (s.adminEmail !== undefined && !String(s.adminEmail).includes("•"))
+      next.smtp.adminEmail = String(s.adminEmail).trim();
+    if (s.brevoApiKey !== undefined && String(s.brevoApiKey).length > 0 && !String(s.brevoApiKey).includes("•"))
       next.smtp.brevoApiKey = String(s.brevoApiKey).trim();
   }
 

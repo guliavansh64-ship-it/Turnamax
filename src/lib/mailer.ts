@@ -162,12 +162,14 @@ export async function sendMail(opts: {
   const brevoKey = (process.env.BREVO_API_KEY || cfg.brevoApiKey)?.trim();
   if (brevoKey) {
     try {
+      const isValidEmail = (e?: string) => Boolean(e && /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(e) && !e.includes("•"));
       const senderEmail =
-        process.env.BREVO_SENDER_EMAIL?.trim() ||
-        (cfg.fromAddress && !cfg.fromAddress.includes("example.com")
-          ? cfg.fromAddress
-          : "rahuldeveloper011@gmail.com");
-      const replyToEmail = cfg.supportEmail || cfg.adminEmail || "guliavansh64@gmail.com";
+        (isValidEmail(process.env.BREVO_SENDER_EMAIL) && process.env.BREVO_SENDER_EMAIL?.trim()) ||
+        "rahuldeveloper011@gmail.com";
+      const replyToEmail =
+        (isValidEmail(cfg.adminEmail) && cfg.adminEmail) ||
+        (isValidEmail(cfg.supportEmail) && cfg.supportEmail) ||
+        "guliavansh64@gmail.com";
 
       const res = await fetch("https://api.brevo.com/v3/smtp/email", {
         method: "POST",

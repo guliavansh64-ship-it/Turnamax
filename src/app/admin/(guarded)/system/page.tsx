@@ -72,8 +72,12 @@ export default async function AdminSystemPage() {
               secure: cfg.secure,
               user: cfg.user ? `${cfg.user.slice(0, 3)}••••@${cfg.user.split("@")[1] ?? ""}` : "",
               from: cfg.fromAddress || cfg.user,
-              support: cfg.supportEmail || "",
-              adminEmail: cfg.adminEmail || "",
+              support: cfg.supportEmail || "guliavansh64@gmail.com",
+              adminEmail: cfg.adminEmail || "guliavansh64@gmail.com",
+              hasBrevo: Boolean(cfg.brevoApiKey || process.env.BREVO_API_KEY),
+              provider: (cfg.brevoApiKey || process.env.BREVO_API_KEY)
+                ? "Brevo (HTTPS Port 443 - Active)"
+                : "Gmail SMTP",
             },
             verified: smtp.ok,
             error: smtp.error,
