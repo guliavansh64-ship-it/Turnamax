@@ -1,0 +1,15 @@
+User-agent: *
+Allow: /
+Allow: /register
+Allow: /login
+Allow: /checkout
+Allow: /forgot-password
+Allow: /legal/
+Disallow: /api/
+Disallow: /admin/
+Disallow: /dashboard/
+Disallow: /pay/
+Disallow: /reset-password/
+Disallow: /verify-email/
+
+Sitemap: https://turnamax.onrender.com/sitemap.xml
