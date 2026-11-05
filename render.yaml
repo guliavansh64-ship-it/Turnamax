@@ -1,0 +1,16 @@
+services:
+  - type: web
+    name: turnamax
+    env: node
+    plan: free
+    buildCommand: node scripts/init-db.mjs && npm run build
+    startCommand: npm run start
+    envVars:
+      - key: NODE_VERSION
+        value: 22.19.0
+      - key: EMAIL_ENABLED
+        value: "1"
+      - key: APP_NAME
+        value: Tournamax
+      - key: ADMIN_NOTIFY_EMAIL
+        value: guliavansh64@gmail.com
