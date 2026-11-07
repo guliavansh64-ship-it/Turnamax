@@ -39,6 +39,8 @@ export type TenantSubscriptionStatus = {
   warning_message: string;
   user_lock_message: string;
   user_lock_submessage: string;
+  is_demo?: boolean;
+  zetpay_enabled?: boolean;
 };
 
 /**
@@ -50,7 +52,15 @@ export async function getTenantSubscription(
   const slug = (tenantSlug ?? "").trim();
   if (!slug) return null;
 
-  // 1. Find customer by tenantId or fallback
+  const isDemoSlug =
+    slug === "demo" ||
+    slug === "starter" ||
+    slug === "preview" ||
+    slug === "template" ||
+    slug === "sample" ||
+    slug === "demo-app";
+
+  // 1. Find customer by tenantId or numeric customer ID
   let customerId: number | null = null;
   let tenantName = "Tournamax App";
 
@@ -71,19 +81,93 @@ export async function getTenantSubscription(
   } else if (/^\d+$/.test(slug)) {
     // If slug is numeric customer ID
     customerId = Number(slug);
-  } else {
-    // Fallback: search for first active customer or default
-    const anyCustomer = await db
-      .select({ id: customers.id, name: customers.name })
-      .from(customers)
-      .limit(1);
-    if (anyCustomer[0]) {
-      customerId = anyCustomer[0].id;
-      tenantName = anyCustomer[0].name;
-    }
   }
 
-  if (!customerId) return null;
+  // If this is a demo slug and no customer specifically claimed it as a custom brand:
+  if (!customerId && isDemoSlug) {
+    const [planRows, settingsRows] = await Promise.all([
+      db.select().from(plans).where(eq(plans.active, true)).orderBy(plans.sort).limit(1),
+      db.select().from(siteSettings),
+    ]);
+    const settingsMap = new Map(settingsRows.map((s) => [s.key, s.value]));
+    const integrations = (settingsMap.get("integrations") as any) ?? {};
+    const contact = (settingsMap.get("contact") as any) ?? {};
+    const subConfig = (settingsMap.get("subscription_config") as any) ?? {};
+
+    const upiId = (subConfig.upiId || contact.upiId || integrations.upiId || "tournamax@upi").trim();
+    const upiName = subConfig.upiName || "Tournamax";
+    const activePlan = planRows[0];
+    const renewalFee = activePlan ? activePlan.priceCents / 100 : 50;
+    const zetpayCfg = (integrations.zetpay as any) ?? {};
+    const zetpayOn = Boolean(zetpayCfg.enabled && zetpayCfg.apiKey) || process.env.ZETPAY_ENABLED === "1";
+
+    return {
+      tenant_slug: slug,
+      tenant_name: "Tournamax Demo App",
+      tenant_status: "active",
+      customer_id: 0,
+      customer_email: "demo@tournamax.com",
+      plan_id: activePlan?.id ?? 1,
+      plan_name: activePlan?.name ? `${activePlan.name} (Demo)` : "Tournament Hosting (Demo)",
+      plan_price: renewalFee,
+      renewal_amount: renewalFee,
+      currency: "INR",
+      duration_days: 30,
+      warning_days: 3,
+      grace_days: 2,
+      starts_at: new Date().toISOString(),
+      expires_at: new Date(Date.now() + 365 * 86400000).toISOString(),
+      days_remaining: 365,
+      hours_remaining: 365 * 24,
+      is_expired: false,
+      admin_warning: false,
+      admin_locked: false,
+      user_locked: false,
+      upi_id: upiId,
+      upi_name: upiName,
+      lock_message: "",
+      warning_message: "",
+      user_lock_message: "Demo Mode Active",
+      user_lock_submessage: "Tournament matches and squads are fully operational.",
+      is_demo: true,
+      zetpay_enabled: zetpayOn,
+    };
+  }
+
+  if (!customerId) {
+    // If not demo and no matching brand, return safe unlocked fallback instead of locking demo users
+    return {
+      tenant_slug: slug,
+      tenant_name: "Tournamax Demo App",
+      tenant_status: "active",
+      customer_id: 0,
+      customer_email: "demo@tournamax.com",
+      plan_id: 1,
+      plan_name: "Tournament Hosting (Demo)",
+      plan_price: 50,
+      renewal_amount: 50,
+      currency: "INR",
+      duration_days: 30,
+      warning_days: 3,
+      grace_days: 2,
+      starts_at: new Date().toISOString(),
+      expires_at: new Date(Date.now() + 365 * 86400000).toISOString(),
+      days_remaining: 365,
+      hours_remaining: 365 * 24,
+      is_expired: false,
+      admin_warning: false,
+      admin_locked: false,
+      user_locked: false,
+      upi_id: "tournamax@upi",
+      upi_name: "Tournamax",
+      lock_message: "",
+      warning_message: "",
+      user_lock_message: "Demo Mode Active",
+      user_lock_submessage: "Tournament matches and squads are fully operational.",
+      is_demo: true,
+      zetpay_enabled: true,
+    };
+  }
 
   const [custRows, subRows, planRows, settingsRows] = await Promise.all([
     db.select().from(customers).where(eq(customers.id, customerId)).limit(1),
@@ -202,5 +286,7 @@ export async function getTenantSubscription(
     user_lock_submessage:
       subConfig.userLockSubmessage ||
       "This tournament app is currently undergoing scheduled maintenance & subscription renewal. Tournaments, squads, and live matches will resume shortly once the organizer completes renewal!",
+    is_demo: false,
+    zetpay_enabled: Boolean(integrations.zetpay?.enabled && integrations.zetpay?.apiKey) || process.env.ZETPAY_ENABLED === "1",
   };
 }

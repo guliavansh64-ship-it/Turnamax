@@ -22,6 +22,16 @@ export async function POST(req: Request) {
       );
     }
 
+    if (tenantInfo.is_demo || !tenantInfo.customer_id || tenantInfo.customer_id === 0) {
+      return Response.json(
+        {
+          ok: true,
+          message: "Demo mode payment proof acknowledged. All features are fully active and unlocked!",
+        },
+        { headers: { "Access-Control-Allow-Origin": "*" } }
+      );
+    }
+
     const ip = clientIp(req);
     if (!rateLimit(`sub-proof:${tenantInfo.customer_id}`, 8, 60 * 60 * 1000)) {
       return Response.json(

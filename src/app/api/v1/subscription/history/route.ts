@@ -23,6 +23,18 @@ export async function GET(req: Request) {
 
     const customerId = tenantInfo.customer_id;
 
+    if (!customerId || customerId === 0) {
+      return Response.json(
+        { ok: true, data: [] },
+        {
+          headers: {
+            "Access-Control-Allow-Origin": "*",
+            "Cache-Control": "no-store, no-cache, must-revalidate",
+          },
+        }
+      );
+    }
+
     // Fetch customer's payments and orders
     const rows = await db
       .select({

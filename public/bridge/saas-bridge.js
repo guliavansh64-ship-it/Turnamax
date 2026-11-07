@@ -1,7 +1,7 @@
 /**
  * Tournamax SaaS Platform Compatibility & Subscription Enforcement Bridge
- * Handles real-time synchronization, warning popups, and non-dismissible locks
- * across both the Tournament Admin APK and Tournament User APK.
+ * Handles real-time synchronization, warning popups, non-dismissible locks,
+ * and ZetPay automated UPI checkout across Tournament Admin and User APKs.
  */
 (function() {
   'use strict';
@@ -32,13 +32,62 @@
     document.getElementById('adminLoginForm')
   );
 
+  // Demo App Detection: template previews and demo accounts should NEVER show restriction screen
+  function isDemoApp() {
+    try {
+      const urlParams = new URLSearchParams(window.location.search);
+      if (urlParams.get('demo') === 'true' || urlParams.get('demo') === '1') return true;
+      const path = (window.location.pathname || '').toLowerCase();
+      if (path.includes('/templates/') || path.includes('admin-panel.html') || path.includes('user-panel.html')) return true;
+      const metaDemo = document.querySelector('meta[name="tournamax-demo"]');
+      if (metaDemo && (metaDemo.content === 'true' || metaDemo.content === '1')) return true;
+      if (window.__TOURNAMAX_IS_DEMO__ === true) return true;
+      const metaTenant = document.querySelector('meta[name="tournamax-tenant"]');
+      if (metaTenant && metaTenant.content === 'demo') return true;
+      const fromUrl = urlParams.get('tenant') || urlParams.get('t');
+      // If no explicit tenant in URL and default demo slugs
+      if (!fromUrl && (tenantSlug === 'demo' || tenantSlug === 'starter' || tenantSlug === 'preview' || tenantSlug === 'template')) {
+        return true;
+      }
+      if (tenantSlug === 'demo' || tenantSlug === 'preview' || tenantSlug === 'template') return true;
+    } catch (e) {}
+    return false;
+  }
+
   let currentStatus = null;
   let lockOverlayEl = null;
   let warningBannerEl = null;
+  let zetpayPollInterval = null;
+
+  // Inject required styles for animations
+  function ensureStyles() {
+    if (document.getElementById('tournamax-bridge-styles')) return;
+    const style = document.createElement('style');
+    style.id = 'tournamax-bridge-styles';
+    style.textContent = `
+      @keyframes tournamaxSpin {
+        0% { transform: rotate(0deg); }
+        100% { transform: rotate(360deg); }
+      }
+      @keyframes tournamaxSlideIn {
+        from { opacity: 0; transform: translateY(-16px); }
+        to { opacity: 1; transform: translateY(0); }
+      }
+    `;
+    document.head.appendChild(style);
+  }
+  ensureStyles();
 
   // 2. Fetch Subscription Status from Backend
   async function checkSubscription() {
     try {
+      // In demo app, immediately ensure no lock screens exist
+      if (isDemoApp()) {
+        removeLockScreen();
+        removeUserLockScreen();
+        removeWarningBanner();
+      }
+
       const res = await fetch('/api/v1/subscription/status?tenant=' + encodeURIComponent(tenantSlug), {
         cache: 'no-store'
       });
@@ -48,12 +97,21 @@
       currentStatus = json.data;
       applySubscriptionRules(json.data);
     } catch (err) {
-      console.warn('[Tournamax Bridge] Subscription sync check failed:', err);
+      console.warn('[Tournamax Bridge] Subscription sync check notice:', err);
     }
   }
 
   // 3. Apply Enforcement Rules
   function applySubscriptionRules(sub) {
+    // If running in demo app or backend confirms is_demo, NEVER lock or restrict
+    if (isDemoApp() || sub.is_demo) {
+      removeLockScreen();
+      removeUserLockScreen();
+      removeWarningBanner();
+      console.log('[Tournamax Bridge] Demo App active — subscription lock bypassed. All features unlocked.');
+      return;
+    }
+
     if (isAdminPanel) {
       handleAdminRules(sub);
     } else {
@@ -65,13 +123,17 @@
      TOURNAMENT ADMIN APK ENFORCEMENT RULES
      ============================================================== */
   function handleAdminRules(sub) {
+    if (isDemoApp() || sub.is_demo) {
+      removeLockScreen();
+      removeWarningBanner();
+      return;
+    }
+
     // A. EXPIRY LOCK: subscription is expired or tenant suspended
     if (sub.admin_locked) {
-      // Remove any warning banner if lock is triggered
       removeWarningBanner();
       showAdminLockScreen(sub);
     } else {
-      // Not locked - remove any lock overlay
       removeLockScreen();
 
       // B. EXPIRY WARNING: 2-3 days before expiry
@@ -85,9 +147,8 @@
 
   // Admin Warning Popup (Dismissible)
   function showAdminWarningPopup(sub) {
-    if (sessionStorage.getItem('tournamax_sub_warn_dismissed') === '1') {
-      return;
-    }
+    if (isDemoApp() || sub.is_demo) return;
+    if (sessionStorage.getItem('tournamax_sub_warn_dismissed') === '1') return;
     if (document.getElementById('tournamax-admin-warn-popup')) return;
 
     const banner = document.createElement('div');
@@ -113,6 +174,8 @@
       month: 'short', day: 'numeric', year: 'numeric'
     }) : 'in ' + sub.days_remaining + ' days';
 
+    const renewalAmount = sub.renewal_amount || 50;
+
     banner.innerHTML = `
       <div style="display:flex;align-items:flex-start;gap:12px;">
         <div style="font-size:24px;line-height:1;">⚠️</div>
@@ -124,7 +187,7 @@
             </span>
           </div>
           <p style="margin:0 0 10px 0;font-size:12px;color:#d1d5db;line-height:1.5;">
-            Your tournament hosting renewal is due on <strong>${formattedExpiry}</strong>. The renewal fee is <strong>₹${sub.renewal_amount || 50}</strong>. Renew early to keep services uninterrupted.
+            Your tournament hosting renewal is due on <strong>${formattedExpiry}</strong>. The renewal fee is <strong>₹${renewalAmount}</strong>. Renew via ZetPay for instant zero-downtime extension.
           </p>
           <div style="display:flex;gap:8px;">
             <button id="btnTournamaxWarnRenew" style="
@@ -136,7 +199,7 @@
               font-size: 12px;
               font-weight: 600;
               cursor: pointer;
-            ">⚡ Renew Now (₹${sub.renewal_amount || 50})</button>
+            ">⚡ Renew Now (₹${renewalAmount})</button>
             <button id="btnTournamaxWarnDismiss" style="
               background: transparent;
               border: 1px solid #4b5563;
@@ -163,11 +226,10 @@
       removeWarningBanner();
       if (typeof window.loadSubscriptionSection === 'function') {
         window.loadSubscriptionSection();
-        // If there is a subscription link in nav, trigger it
-        const subNav = document.querySelector('[data-section="subscription-section"], #nav-subscription');
+        const subNav = document.querySelector('[data-section="subscription-section"], #nav-subscription, #navLinkSubscription');
         if (subNav) subNav.click();
       } else {
-        showAdminLockScreen(sub, false); // Open renewal modal
+        showAdminLockScreen(sub, false);
       }
     });
   }
@@ -179,8 +241,14 @@
     }
   }
 
-  // Admin Expiry Lock Screen (Full-Screen, Non-Dismissible)
+  // Admin Expiry Lock Screen (Full-Screen, Non-Dismissible for expired customer tenants)
   function showAdminLockScreen(sub, isMandatory = true) {
+    // Demo app safeguard: never show lock screen in demo app
+    if (isDemoApp() || sub.is_demo) {
+      removeLockScreen();
+      return;
+    }
+
     if (document.getElementById('tournamax-admin-lock-screen')) return;
 
     // Prevent background scrolling
@@ -189,7 +257,7 @@
       document.body.style.overflow = 'hidden';
     }
 
-    const upiId = sub.upi_id || 'platform@upi';
+    const upiId = sub.upi_id || 'tournamax@upi';
     const amount = sub.renewal_amount || 50;
     const upiNote = 'Renewal-' + tenantSlug;
     const upiUri = `upi://pay?pa=${encodeURIComponent(upiId)}&pn=Tournamax&am=${amount}&cu=INR&tn=${encodeURIComponent(upiNote)}`;
@@ -247,50 +315,130 @@
           Tournament Admin Restricted
         </h3>
         <p style="margin: 0 0 16px; color: #9ca3af; font-size: 13px; line-height: 1.5;">
-          ${sub.lock_message || 'Your hosting subscription has expired. Management features are restricted until a ₹50 renewal payment is verified.'}
+          ${sub.lock_message || 'Your hosting subscription expired. Management features are restricted until renewal payment is verified.'}
         </p>
 
+        <!-- Renewal Pricing Header -->
         <div style="background:#0c0e15; border:1px solid #272d3d; border-radius:12px; padding:16px; margin-bottom:16px;">
-          <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px; padding-bottom:8px; border-bottom:1px solid #1e2433; font-size:13px;">
+          <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:14px; padding-bottom:10px; border-bottom:1px solid #1e2433; font-size:13px;">
             <span style="color:#9ca3af;">Renewal Fee:</span>
-            <strong style="color:#22c55e; font-size:16px;">₹${amount} <span style="font-size:11px;color:#9ca3af;">/ 30 Days</span></strong>
+            <strong style="color:#22c55e; font-size:18px;">₹${amount} <span style="font-size:12px;color:#9ca3af;font-weight:normal;">/ 30 Days</span></strong>
           </div>
 
-          <!-- QR & Payment URI -->
-          <div style="display:flex; flex-wrap:wrap; align-items:center; justify-content:center; gap:16px; margin-bottom:14px;">
-            <div style="background:#fff; padding:6px; border-radius:8px; display:inline-block;">
-              <img src="${qrUrl}" alt="Scan to Pay ₹${amount}" style="width:140px; height:140px; display:block;" />
+          <!-- PRIMARY PAYMENT OPTION: ZetPay Automated UPI Checkout -->
+          <div style="background: linear-gradient(135deg, rgba(34, 197, 94, 0.08), rgba(16, 185, 129, 0.04)); border: 1px solid rgba(34, 197, 94, 0.3); border-radius: 10px; padding: 14px; margin-bottom: 14px;">
+            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:8px;">
+              <span style="font-size:11px; font-weight:700; color:#4ade80; text-transform:uppercase; letter-spacing:0.5px;">⚡ Automatic UPI Checkout</span>
+              <span style="background:rgba(34,197,94,0.2); color:#4ade80; font-size:10px; padding:2px 7px; border-radius:10px; font-weight:600;">Instant Auto-Unlock</span>
             </div>
-            <div style="text-align:left; flex:1; min-width:180px;">
-              <div style="font-size:11px; color:#9ca3af; margin-bottom:4px;">Platform UPI VPA:</div>
-              <div style="display:flex; gap:4px; margin-bottom:10px;">
-                <input type="text" id="tournamaxUpiVpaInput" value="${upiId}" readonly style="
-                  background:#000; border:1px solid #374151; color:#f3f4f6; font-family:monospace; font-size:12px; padding:6px 8px; border-radius:6px; flex:1;
-                " />
-                <button type="button" id="btnTournamaxCopyVpa" style="
-                  background:#374151; border:none; color:#f3f4f6; font-size:11px; padding:6px 10px; border-radius:6px; cursor:pointer;
-                ">Copy</button>
+
+            <p style="font-size:12px; color:#d1d5db; margin:0 0 12px; text-align:left; line-height:1.4;">
+              Pay via <strong>ZetPay</strong> using Google Pay, PhonePe, Paytm, Cred, or any UPI app. Server auto-confirms payment and <strong>instantly unlocks your tournament management</strong>.
+            </p>
+
+            <!-- ZetPay Initial Button -->
+            <div id="tournamaxZetpayInitialBox">
+              <button type="button" id="btnTournamaxPayZetpay" style="
+                width: 100%;
+                background: linear-gradient(135deg, #22c55e, #16a34a);
+                border: none;
+                color: #ffffff;
+                font-weight: 700;
+                font-size: 14px;
+                padding: 11px 16px;
+                border-radius: 8px;
+                cursor: pointer;
+                display: flex;
+                align-items: center;
+                justify-content: center;
+                gap: 8px;
+                box-shadow: 0 4px 14px rgba(34, 197, 94, 0.35);
+              ">⚡ Pay ₹${amount} with ZetPay (Instant UPI)</button>
+              <div id="tournamaxZetpayErrorMsg" style="display:none; color:#f87171; font-size:11px; margin-top:6px; text-align:left;"></div>
+              <div style="display:flex; justify-content:center; align-items:center; gap:6px; margin-top:8px; font-size:10px; color:#9ca3af;">
+                <span>🔒 ZetPay Verified Gateway</span>
+                <span>•</span>
+                <span>No UTR Proof Needed</span>
               </div>
-              <a href="${upiUri}" style="
-                display:block; text-align:center; background:#ff5500; color:#fff; font-size:12px; font-weight:600; padding:8px 12px; border-radius:6px; text-decoration:none;
-              ">⚡ Open Any UPI App</a>
+            </div>
+
+            <!-- ZetPay Polling / In-Progress View -->
+            <div id="tournamaxZetpayPollingBox" style="display:none; text-align:center; padding:10px 0;">
+              <div style="
+                display:inline-block;
+                width:28px;
+                height:28px;
+                border:3px solid rgba(34, 197, 94, 0.2);
+                border-top-color:#22c55e;
+                border-radius:50%;
+                animation:tournamaxSpin 0.8s linear infinite;
+                margin-bottom:8px;
+              "></div>
+              <div style="font-size:13px; font-weight:700; color:#f3f4f6; margin-bottom:4px;">
+                Awaiting UPI Payment Confirmation…
+              </div>
+              <p style="font-size:11px; color:#9ca3af; margin:0 0 10px; line-height:1.4;">
+                Complete the ₹${amount} payment in your UPI app. This screen will auto-unlock the moment ZetPay confirms.
+              </p>
+              <div style="display:flex; justify-content:center; gap:6px; flex-wrap:wrap;">
+                <button type="button" id="btnTournamaxReopenPayment" style="
+                  background:#2563eb; border:none; color:#fff; font-size:11px; padding:6px 12px; border-radius:6px; cursor:pointer; font-weight:600;
+                ">Reopen Payment Link ↗</button>
+                <button type="button" id="btnTournamaxCheckNow" style="
+                  background:#374151; border:none; color:#f3f4f6; font-size:11px; padding:6px 12px; border-radius:6px; cursor:pointer;
+                ">🔄 Check Status</button>
+              </div>
+              <div id="tournamaxPollingStatusText" style="font-size:11px; color:#9ca3af; margin-top:6px;"></div>
+            </div>
+
+            <!-- ZetPay Success Message -->
+            <div id="tournamaxZetpaySuccessBox" style="display:none; text-align:center; padding:10px; background:rgba(34,197,94,0.15); border:1px solid #22c55e; border-radius:8px;">
+              <div style="font-size:22px; margin-bottom:2px;">🎉</div>
+              <div style="font-size:14px; font-weight:700; color:#4ade80; margin-bottom:2px;">Payment Confirmed!</div>
+              <div style="font-size:12px; color:#d1d5db;" id="tournamaxZetpaySuccessMsg">Hosting subscription renewed. Restoring access…</div>
             </div>
           </div>
 
-          <!-- Submit UTR Form -->
-          <div style="text-align:left;">
+          <!-- SECONDARY / FALLBACK OPTION: Manual UPI & UTR Submission -->
+          <div style="text-align:center; margin-top:8px;">
+            <button type="button" id="btnTournamaxToggleManual" style="
+              background:transparent; border:none; color:#9ca3af; font-size:11px; text-decoration:underline; cursor:pointer; padding:4px 6px;
+            ">Or pay manually via UPI reference (UTR) ▼</button>
+          </div>
+
+          <div id="tournamaxManualUtrBox" style="display:none; margin-top:12px; padding-top:12px; border-top:1px dashed #272d3d; text-align:left;">
+            <div style="display:flex; flex-wrap:wrap; align-items:center; justify-content:center; gap:14px; margin-bottom:12px;">
+              <div style="background:#fff; padding:5px; border-radius:6px; display:inline-block;">
+                <img src="${qrUrl}" alt="Scan to Pay ₹${amount}" style="width:120px; height:120px; display:block;" />
+              </div>
+              <div style="flex:1; min-width:170px;">
+                <div style="font-size:11px; color:#9ca3af; margin-bottom:4px;">Platform UPI VPA:</div>
+                <div style="display:flex; gap:4px; margin-bottom:8px;">
+                  <input type="text" id="tournamaxUpiVpaInput" value="${upiId}" readonly style="
+                    background:#000; border:1px solid #374151; color:#f3f4f6; font-family:monospace; font-size:12px; padding:6px 8px; border-radius:6px; flex:1;
+                  " />
+                  <button type="button" id="btnTournamaxCopyVpa" style="
+                    background:#374151; border:none; color:#f3f4f6; font-size:11px; padding:6px 10px; border-radius:6px; cursor:pointer;
+                  ">Copy</button>
+                </div>
+                <a href="${upiUri}" style="
+                  display:block; text-align:center; background:#ea580c; color:#fff; font-size:11px; font-weight:600; padding:7px 10px; border-radius:6px; text-decoration:none;
+                ">⚡ Open Any UPI App</a>
+              </div>
+            </div>
+
             <label style="display:block; font-size:11px; color:#d1d5db; margin-bottom:4px; font-weight:600;">
               Enter 12-Digit Transaction Reference (UTR):
             </label>
             <div style="display:flex; gap:6px;">
               <input type="text" id="tournamaxUtrInput" placeholder="e.g. 429812345678" maxlength="30" style="
-                background:#000; border:1px solid #374151; color:#fff; font-family:monospace; font-size:13px; padding:8px 10px; border-radius:6px; flex:1;
+                background:#000; border:1px solid #374151; color:#fff; font-family:monospace; font-size:12px; padding:7px 10px; border-radius:6px; flex:1;
               " />
               <button type="button" id="btnTournamaxSubmitUtr" style="
-                background:#22c55e; border:none; color:#fff; font-weight:600; font-size:12px; padding:8px 14px; border-radius:6px; cursor:pointer; white-space:nowrap;
+                background:#22c55e; border:none; color:#fff; font-weight:600; font-size:12px; padding:7px 12px; border-radius:6px; cursor:pointer; white-space:nowrap;
               ">Submit Proof</button>
             </div>
-            <div id="tournamaxUtrMsg" style="display:none; font-size:12px; margin-top:8px; padding:6px 10px; border-radius:6px;"></div>
+            <div id="tournamaxUtrMsg" style="display:none; font-size:11px; margin-top:8px; padding:6px 10px; border-radius:6px;"></div>
           </div>
         </div>
 
@@ -298,13 +446,166 @@
           <span style="font-size:11px; color:#6b7280;">Tenant: <code>${tenantSlug}</code></span>
           <button type="button" id="btnTournamaxPollStatus" style="
             background:transparent; border:1px solid #374151; color:#9ca3af; font-size:11px; padding:5px 10px; border-radius:6px; cursor:pointer;
-          ">🔄 Check Status</button>
+          ">🔄 Refresh Status</button>
         </div>
       </div>
     `;
 
     document.body.appendChild(overlay);
     lockOverlayEl = overlay;
+
+    // Attach ZetPay checkout handler
+    let activePaymentUrl = null;
+    let activeOrderCode = null;
+
+    const btnPayZetpay = document.getElementById('btnTournamaxPayZetpay');
+    const zetpayInitialBox = document.getElementById('tournamaxZetpayInitialBox');
+    const zetpayPollingBox = document.getElementById('tournamaxZetpayPollingBox');
+    const zetpaySuccessBox = document.getElementById('tournamaxZetpaySuccessBox');
+    const zetpayErrorMsg = document.getElementById('tournamaxZetpayErrorMsg');
+    const pollingStatusText = document.getElementById('tournamaxPollingStatusText');
+
+    btnPayZetpay?.addEventListener('click', async () => {
+      if (btnPayZetpay.disabled) return;
+      btnPayZetpay.disabled = true;
+      btnPayZetpay.innerHTML = 'Connecting to ZetPay…';
+      if (zetpayErrorMsg) zetpayErrorMsg.style.display = 'none';
+
+      try {
+        const res = await fetch('/api/v1/subscription/zetpay/start?tenant=' + encodeURIComponent(tenantSlug), {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ tenant: tenantSlug })
+        });
+        const data = await res.json();
+        if (!res.ok || !data.ok) {
+          throw new Error(data.error || 'Failed to initialize ZetPay order.');
+        }
+
+        activePaymentUrl = data.paymentUrl;
+        activeOrderCode = data.orderCode;
+
+        // Open payment in popup or new tab
+        const width = 430;
+        const height = 700;
+        const left = Math.max(0, (window.screen.width - width) / 2);
+        const top = Math.max(0, (window.screen.height - height) / 2);
+        let win = window.open(
+          activePaymentUrl,
+          'ZetPayRenewalPopup',
+          `width=${width},height=${height},top=${top},left=${left},scrollbars=yes,resizable=yes`
+        );
+        if (!win || win.closed || typeof win.closed === 'undefined') {
+          window.open(activePaymentUrl, '_blank');
+        }
+
+        // Switch to polling view
+        if (zetpayInitialBox) zetpayInitialBox.style.display = 'none';
+        if (zetpayPollingBox) zetpayPollingBox.style.display = 'block';
+
+        startZetpayPolling(activeOrderCode);
+
+      } catch (err) {
+        if (zetpayErrorMsg) {
+          zetpayErrorMsg.textContent = err.message || 'Payment initiation failed.';
+          zetpayErrorMsg.style.display = 'block';
+        }
+        btnPayZetpay.disabled = false;
+        btnPayZetpay.innerHTML = `⚡ Pay ₹${amount} with ZetPay (Instant UPI)`;
+      }
+    });
+
+    document.getElementById('btnTournamaxReopenPayment')?.addEventListener('click', () => {
+      if (activePaymentUrl) {
+        window.open(activePaymentUrl, '_blank');
+      }
+    });
+
+    document.getElementById('btnTournamaxCheckNow')?.addEventListener('click', () => {
+      if (activeOrderCode) {
+        checkZetpayStatusOnce(activeOrderCode, true);
+      }
+    });
+
+    function startZetpayPolling(orderCode) {
+      if (zetpayPollInterval) clearInterval(zetpayPollInterval);
+      let pollCount = 0;
+
+      const poll = async () => {
+        pollCount += 1;
+        await checkZetpayStatusOnce(orderCode, false, pollCount);
+      };
+
+      // Check immediately, then every 3 seconds
+      poll();
+      zetpayPollInterval = setInterval(poll, 3000);
+    }
+
+    async function checkZetpayStatusOnce(orderCode, manual = false, count = 1) {
+      try {
+        if (pollingStatusText) {
+          pollingStatusText.textContent = manual
+            ? 'Checking confirmation with ZetPay…'
+            : `Checking status with ZetPay… (Check #${count})`;
+        }
+
+        const res = await fetch(`/api/v1/subscription/zetpay/status?tenant=${encodeURIComponent(tenantSlug)}&code=${encodeURIComponent(orderCode)}`, {
+          cache: 'no-store'
+        });
+        const data = await res.json();
+
+        if (data && data.status === 'success') {
+          if (zetpayPollInterval) clearInterval(zetpayPollInterval);
+          zetpayPollInterval = null;
+
+          if (zetpayPollingBox) zetpayPollingBox.style.display = 'none';
+          if (zetpaySuccessBox) {
+            zetpaySuccessBox.style.display = 'block';
+            const msgEl = document.getElementById('tournamaxZetpaySuccessMsg');
+            if (msgEl && data.message) msgEl.textContent = data.message;
+          }
+
+          // Automatically unlock and refresh after short celebratory delay
+          setTimeout(async () => {
+            removeLockScreen();
+            await checkSubscription();
+            if (typeof window.loadSubscriptionSection === 'function') {
+              window.loadSubscriptionSection();
+            }
+          }, 1800);
+
+        } else if (data && data.status === 'failed') {
+          if (zetpayPollInterval) clearInterval(zetpayPollInterval);
+          zetpayPollInterval = null;
+          if (pollingStatusText) {
+            pollingStatusText.style.color = '#f87171';
+            pollingStatusText.textContent = data.message || 'ZetPay reported payment was cancelled or failed.';
+          }
+          if (btnPayZetpay) {
+            btnPayZetpay.disabled = false;
+            btnPayZetpay.innerHTML = `⚡ Retry ZetPay Payment (₹${amount})`;
+          }
+          if (zetpayInitialBox) zetpayInitialBox.style.display = 'block';
+        }
+      } catch (pollErr) {
+        console.warn('Status poll warning:', pollErr);
+      }
+    }
+
+    // Toggle Manual UTR Section
+    document.getElementById('btnTournamaxToggleManual')?.addEventListener('click', () => {
+      const manualBox = document.getElementById('tournamaxManualUtrBox');
+      const toggleBtn = document.getElementById('btnTournamaxToggleManual');
+      if (manualBox) {
+        const isHidden = manualBox.style.display === 'none';
+        manualBox.style.display = isHidden ? 'block' : 'none';
+        if (toggleBtn) {
+          toggleBtn.textContent = isHidden
+            ? '▲ Hide manual UPI submission'
+            : 'Or pay manually via UPI reference (UTR) ▼';
+        }
+      }
+    });
 
     // Handle Copy UPI
     document.getElementById('btnTournamaxCopyVpa')?.addEventListener('click', () => {
@@ -315,7 +616,7 @@
       });
     });
 
-    // Handle UTR Submit
+    // Handle Manual UTR Submit
     document.getElementById('btnTournamaxSubmitUtr')?.addEventListener('click', async () => {
       const utrEl = document.getElementById('tournamaxUtrInput');
       const msgEl = document.getElementById('tournamaxUtrMsg');
@@ -368,16 +669,20 @@
       }
     });
 
-    // Handle Manual Status Check
+    // Handle Manual Status Refresh
     document.getElementById('btnTournamaxPollStatus')?.addEventListener('click', async () => {
       const btn = document.getElementById('btnTournamaxPollStatus');
-      if (btn) btn.textContent = 'Checking...';
+      if (btn) btn.textContent = 'Checking…';
       await checkSubscription();
-      if (btn) btn.textContent = '🔄 Check Status';
+      if (btn) btn.textContent = '🔄 Refresh Status';
     });
   }
 
   function removeLockScreen() {
+    if (zetpayPollInterval) {
+      clearInterval(zetpayPollInterval);
+      zetpayPollInterval = null;
+    }
     if (lockOverlayEl && lockOverlayEl.parentNode) {
       lockOverlayEl.parentNode.removeChild(lockOverlayEl);
       lockOverlayEl = null;
@@ -390,6 +695,10 @@
      TOURNAMENT USER APK ENFORCEMENT RULES (DELAYED LOCK)
      ============================================================== */
   function handleUserRules(sub) {
+    if (isDemoApp() || sub.is_demo) {
+      removeUserLockScreen();
+      return;
+    }
     if (sub.user_locked) {
       showUserLockScreen(sub);
     } else {
@@ -400,6 +709,10 @@
   let userLockOverlayEl = null;
 
   function showUserLockScreen(sub) {
+    if (isDemoApp() || sub.is_demo) {
+      removeUserLockScreen();
+      return;
+    }
     if (document.getElementById('tournamax-user-lock-screen')) return;
 
     document.documentElement.style.overflow = 'hidden';
@@ -509,7 +822,7 @@
 
     document.getElementById('btnTournamaxUserRefresh')?.addEventListener('click', async () => {
       const btn = document.getElementById('btnTournamaxUserRefresh');
-      if (btn) btn.textContent = 'Checking...';
+      if (btn) btn.textContent = 'Checking…';
       await checkSubscription();
       if (btn) btn.textContent = '🔄 Refresh App';
     });
@@ -525,13 +838,8 @@
   }
 
   // 4. Initial check & Periodic Polling
-  if (document.readyState === 'loading') {
-    document.addEventListener('DOMContentLoaded', initBridge);
-  } else {
-    initBridge();
-  }
-
   function initBridge() {
+    ensureStyles();
     checkSubscription();
     // Poll every 30 seconds
     setInterval(checkSubscription, 30000);
@@ -539,11 +847,19 @@
     window.addEventListener('focus', checkSubscription);
   }
 
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', initBridge);
+  } else {
+    initBridge();
+  }
+
   // Export to window for custom tournament script access
   window.TournamaxBridge = {
     tenant: tenantSlug,
     check: checkSubscription,
-    getStatus: () => currentStatus
+    getStatus: () => currentStatus,
+    isDemo: isDemoApp,
+    removeLock: removeLockScreen
   };
 
 })();

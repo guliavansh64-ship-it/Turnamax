@@ -10,6 +10,12 @@
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/flatpickr/dist/flatpickr.min.css">
     <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🎮</text></svg>">
     <!-- White-Label SaaS Platform Compatibility Bridge -->
+    <meta name="tournamax-demo" content="true">
+    <meta name="tournamax-tenant" content="demo">
+    <script>
+        window.__TOURNAMAX_IS_DEMO__ = true;
+        window.__TOURNAMAX_TENANT__ = "demo";
+    </script>
     <script src="bridge/saas-bridge.js"></script>
     <style>
         /* Strict modal containment - ensure modals NEVER leak onto page */
@@ -6309,8 +6315,27 @@
                     <div class="col-lg-7">
                         <div class="card bg-dark border-secondary p-4 h-100" style="box-shadow: 0 10px 30px rgba(0,0,0,0.4);">
                             <div class="d-flex justify-content-between align-items-center mb-3">
-                                <h5 class="fw-bold text-white mb-0"><i class="bi bi-qr-code text-warning me-2"></i>Renew Platform Hosting (₹50)</h5>
+                                <h5 class="fw-bold text-white mb-0"><i class="bi bi-shield-check text-success me-2"></i>Renew Platform Hosting (₹50)</h5>
                                 <span class="badge bg-success py-1 px-2">+30 Days Extension</span>
+                            </div>
+
+                            <!-- Primary ZetPay Instant UPI Button -->
+                            <div class="p-3 rounded mb-3" style="background: linear-gradient(135deg, rgba(34, 197, 94, 0.12), rgba(16, 185, 129, 0.05)); border: 1px solid rgba(34, 197, 94, 0.35);">
+                                <div class="d-flex justify-content-between align-items-center mb-2">
+                                    <span class="badge bg-success text-white small fw-bold">⚡ Instant UPI (ZetPay)</span>
+                                    <small class="text-success"><i class="bi bi-patch-check-fill me-1"></i>Auto-Verifies Instantly</small>
+                                </div>
+                                <button type="button" class="btn btn-success btn-lg w-100 fw-bold shadow-sm d-flex align-items-center justify-content-center gap-2" id="btnAdminZetpayRenew" onclick="startAdminZetpayRenewal()">
+                                    <i class="bi bi-lightning-charge-fill"></i> Pay ₹50 Online with ZetPay (Instant Auto-Renewal)
+                                </button>
+                                <div id="adminZetpayStatusMsg" style="display:none;" class="alert py-2 small mt-2 mb-0"></div>
+                                <div class="d-flex justify-content-center gap-2 text-muted mt-2" style="font-size:11px;">
+                                    <span>Google Pay</span> • <span>PhonePe</span> • <span>Paytm</span> • <span>Cred</span> • <span>Any UPI</span>
+                                </div>
+                            </div>
+
+                            <div class="text-center my-2">
+                                <small class="text-muted text-uppercase fw-semibold" style="letter-spacing:1px;font-size:10px;">— Or Pay Manually Via Static QR / VPA —</small>
                             </div>
 
                             <div class="row g-3 align-items-center mb-3">
@@ -8235,9 +8260,10 @@
 
                     if (planNameEl) planNameEl.textContent = sub.plan_name || 'Starter App Setup';
                     
+                    const isDemo = Boolean(sub.is_demo);
                     const isActive = !sub.is_expired && sub.tenant_status === 'active';
-                    const badgeClass = isActive ? 'bg-success' : 'bg-danger';
-                    const badgeText = isActive ? 'ACTIVE' : 'EXPIRED';
+                    const badgeClass = isDemo ? 'bg-success' : (isActive ? 'bg-success' : 'bg-danger');
+                    const badgeText = isDemo ? 'ACTIVE (DEMO)' : (isActive ? 'ACTIVE' : 'EXPIRED');
 
                     if (statusBadgeEl) statusBadgeEl.innerHTML = `<span class="badge ${badgeClass}">${badgeText}</span>`;
                     if (sidebarBadge) {
@@ -8246,14 +8272,14 @@
                     }
 
                     if (daysLeftEl) {
-                        daysLeftEl.textContent = isActive ? `${sub.days_remaining} Days Remaining` : 'Expired - Renewal Needed';
-                        daysLeftEl.className = isActive ? 'small text-success fw-bold' : 'small text-danger fw-bold';
+                        daysLeftEl.textContent = isDemo ? 'Full Demo Access (Unlocked)' : (isActive ? `${sub.days_remaining} Days Remaining` : 'Expired - Renewal Needed');
+                        daysLeftEl.className = 'small text-success fw-bold';
                     }
 
                     if (expiryDateEl) {
-                        expiryDateEl.textContent = sub.expires_at ? new Date(sub.expires_at).toLocaleDateString(undefined, {
+                        expiryDateEl.textContent = isDemo ? 'Active Demo Platform' : (sub.expires_at ? new Date(sub.expires_at).toLocaleDateString(undefined, {
                             year: 'numeric', month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit'
-                        }) : 'N/A';
+                        }) : 'N/A');
                     }
                 }
 
@@ -8390,10 +8416,110 @@
             });
         }
 
+        let adminZetpayPollInterval = null;
+
+        async function startAdminZetpayRenewal() {
+            const btn = document.getElementById('btnAdminZetpayRenew');
+            const statusMsg = document.getElementById('adminZetpayStatusMsg');
+            const urlParams = new URLSearchParams(window.location.search);
+            const tenantSlug = urlParams.get('tenant') || 'starter';
+
+            if (btn) {
+                btn.disabled = true;
+                btn.innerHTML = '<span class="spinner-border spinner-border-sm me-2"></span>Connecting to ZetPay…';
+            }
+            if (statusMsg) {
+                statusMsg.className = 'alert alert-info py-2 small mt-2 mb-0';
+                statusMsg.textContent = 'Initiating secure ZetPay UPI transaction…';
+                statusMsg.style.display = 'block';
+            }
+
+            try {
+                const res = await fetch(`/api/v1/subscription/zetpay/start?tenant=${encodeURIComponent(tenantSlug)}`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ tenant: tenantSlug })
+                });
+                const data = await res.json();
+                if (!res.ok || !data.ok) {
+                    throw new Error(data.error || 'Failed to initialize ZetPay order.');
+                }
+
+                const width = 430;
+                const height = 700;
+                const left = Math.max(0, (window.screen.width - width) / 2);
+                const top = Math.max(0, (window.screen.height - height) / 2);
+                const win = window.open(data.paymentUrl, 'AdminZetPayPopup', `width=${width},height=${height},top=${top},left=${left},scrollbars=yes,resizable=yes`);
+                if (!win || win.closed || typeof win.closed === 'undefined') {
+                    window.open(data.paymentUrl, '_blank');
+                }
+
+                if (statusMsg) {
+                    statusMsg.className = 'alert alert-warning py-2 small mt-2 mb-0';
+                    statusMsg.innerHTML = '<strong>Awaiting UPI confirmation…</strong> Complete payment of ₹' + data.amountRupees + ' in your UPI app. Checking status every 3 seconds… <a href="' + data.paymentUrl + '" target="_blank" class="alert-link ms-2">Reopen Payment ↗</a>';
+                }
+
+                if (adminZetpayPollInterval) clearInterval(adminZetpayPollInterval);
+                let pollAttempts = 0;
+
+                adminZetpayPollInterval = setInterval(async () => {
+                    pollAttempts += 1;
+                    try {
+                        const statusRes = await fetch(`/api/v1/subscription/zetpay/status?tenant=${encodeURIComponent(tenantSlug)}&code=${encodeURIComponent(data.orderCode)}`);
+                        const statusData = await statusRes.json();
+
+                        if (statusData && statusData.status === 'success') {
+                            clearInterval(adminZetpayPollInterval);
+                            adminZetpayPollInterval = null;
+
+                            if (statusMsg) {
+                                statusMsg.className = 'alert alert-success py-2 small mt-2 mb-0';
+                                statusMsg.innerHTML = '🎉 <strong>Payment Confirmed!</strong> Hosting renewed for 30 days. Updating status…';
+                            }
+                            if (btn) {
+                                btn.disabled = false;
+                                btn.innerHTML = '<i class="bi bi-check2-circle me-1"></i> Payment Verified Successfully';
+                            }
+
+                            setTimeout(() => {
+                                loadSubscriptionSection();
+                                loadSubscriptionHistory(tenantSlug);
+                            }, 1500);
+
+                        } else if (statusData && statusData.status === 'failed') {
+                            clearInterval(adminZetpayPollInterval);
+                            adminZetpayPollInterval = null;
+                            if (statusMsg) {
+                                statusMsg.className = 'alert alert-danger py-2 small mt-2 mb-0';
+                                statusMsg.textContent = statusData.message || 'ZetPay reported the payment as failed or cancelled.';
+                            }
+                            if (btn) {
+                                btn.disabled = false;
+                                btn.innerHTML = '<i class="bi bi-lightning-charge-fill me-1"></i> Retry ZetPay Payment';
+                            }
+                        }
+                    } catch (e) {
+                        console.warn('Admin status check notice:', e);
+                    }
+                }, 3000);
+
+            } catch (err) {
+                if (statusMsg) {
+                    statusMsg.className = 'alert alert-danger py-2 small mt-2 mb-0';
+                    statusMsg.textContent = err.message || 'Payment initiation failed.';
+                }
+                if (btn) {
+                    btn.disabled = false;
+                    btn.innerHTML = '<i class="bi bi-lightning-charge-fill me-1"></i> Pay ₹50 Online with ZetPay';
+                }
+            }
+        }
+
         window.loadSubscriptionSection = loadSubscriptionSection;
         window.loadSubscriptionHistory = loadSubscriptionHistory;
         window.submitRenewalProof = submitRenewalProof;
         window.copySubUpiId = copySubUpiId;
+        window.startAdminZetpayRenewal = startAdminZetpayRenewal;
 
         function loadTransactionsSection() {
             if (!elements.transactionsSection) return;
